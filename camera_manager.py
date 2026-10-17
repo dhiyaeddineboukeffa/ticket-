@@ -12,20 +12,16 @@ class CameraManager:
         # Try up to 10 cameras (a common range to check)
         # This loop attempts to open a VideoCapture object for each index
         # If successful, it's considered available.
-        for i in range(10): 
+        for i in range(4): 
             try:
                 cap = cv2.VideoCapture(i)
                 if cap.isOpened():
                     available_cameras.append(i)
                     cap.release()
                 else:
-                    # If camera 0 isn't found, it's unlikely higher indices exist for typical setups.
-                    # This heuristic helps to stop early if no cameras are connected.
-                    if i == 0:
-                        break 
+                    break 
             except Exception:
-                # Catch any unexpected errors during VideoCapture creation/opening
-                pass
+                break
         return available_cameras
 
     def open_video_source(self, source_type, source_path):
