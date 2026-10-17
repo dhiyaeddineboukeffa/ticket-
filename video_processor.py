@@ -62,24 +62,20 @@ class VideoProcessor:
         self.people_in_frame = 0 # Initialize new counter for people in frame
 
     def process_frame(self, frame):
-        if self.line_coords is None:
-            # If no line is set, still count people in frame
-            results = self.model.track(frame, persist=True, classes=[self.person_class_index])
-            self.people_in_frame = len(results[0].boxes.id) if results[0].boxes.id is not None else 0
-            annotated_frame = results[0].plot()
-            return annotated_frame, self.counter_in, self.counter_out, self.people_in_frame
-
         results = self.model.track(frame, persist=True, classes=[self.person_class_index])
         
+        num_boxes = len(results[0].boxes) if results[0].boxes is not None else 0
+        self.people_in_frame = num_boxes
+        annotated_frame = results[0].plot()
+
+        if self.line_coords is None:
+            return annotated_frame, self.counter_in, self.counter_out, self.people_in_frame
+
         if results[0].boxes.id is None:
-            self.people_in_frame = 0 # No people detected
-            return frame, self.counter_in, self.counter_out, self.people_in_frame
+            return annotated_frame, self.counter_in, self.counter_out, self.people_in_frame
 
         boxes = results[0].boxes.xywh.cpu()
         track_ids = results[0].boxes.id.int().cpu().tolist()
-        annotated_frame = results[0].plot()
-
-        self.people_in_frame = len(track_ids) # Update count of people in frame
 
         for box, track_id in zip(boxes, track_ids):
             x, y, w, h = box
