@@ -1,0 +1,21 @@
+{
+    "line_coords": [
+        [
+            97,
+            264
+        ],
+        [
+            1109,
+            241
+        ]
+    ],
+    "direction_swapped": true,
+    "api_endpoint": "https://tramcreditalgeria.up.railway.app/api/transaction/Passenger",
+    "video_source_type": "video",
+    "video_path": "C:/Users/LagunaNL5A/Desktop/working project/background video - people - walking -.mp4",
+    "ip_url": "",
+    "webcam_index": 0,
+    "mongo_uri": "mongodb://localhost:27017/",
+    "mongo_db_name": "people_counter_db",
+    "mongo_collection_name": "counts"
+}
