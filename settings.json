@@ -1,12 +1,12 @@
 {
     "line_coords": [
         [
-            514,
-            109
+            113,
+            74
         ],
         [
-            520,
-            461
+            114,
+            391
         ]
     ],
     "direction_swapped": false,
@@ -15,7 +15,7 @@
     "video_path": "C:/Users/LagunaNL5A/Desktop/CODE/working project/background video - people - walking -.mp4",
     "ip_url": "",
     "webcam_index": 0,
-    "conf_threshold": 0.85,
+    "conf_threshold": 0.45,
     "model_name": "yolov8n.pt",
     "tracker_type": "bytetrack.yaml"
 }

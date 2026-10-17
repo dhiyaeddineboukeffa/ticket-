@@ -80,6 +80,7 @@ class PeopleCounterApp:
 
         # --- Load Settings and Initial State ---
         self.load_initial_settings()
+        self.conf_var.trace_add("write", self._on_conf_changed)
         self.update_webcam_list()
         self.event_handlers.on_source_change()
 
@@ -196,7 +197,6 @@ class PeopleCounterApp:
             'sync_offline_cache': self.event_handlers.sync_offline_cache,
             'export_offline_csv': self.event_handlers.export_offline_csv
         }
-        self.conf_var.trace_add("write", self._on_conf_changed)
 
         self.widgets.update(gui_elements.build_settings_tab_content(
             settings_tab_frame, self.api_endpoint_var,
@@ -372,6 +372,19 @@ class PeopleCounterApp:
 
         self.update_status("Opening video source...")
 
+        # Always release previous capture to prevent resource lock
+        if self.cap:
+            try:
+                self.cap.release()
+            except Exception:
+                pass
+            self.cap = None
+
+        # Guarantee processor has the active counting line and direction
+        if self.line_coords and len(self.line_coords) == 2:
+            self.processor.set_line_and_direction(self.line_coords)
+            self.processor.set_direction_swapped(self.settings_manager.get_setting("direction_swapped", False))
+
         # Open video source (will get a new cap if one exists and is released)
         current_source_type = self.video_source_var.get()
         current_source_path = ""
@@ -462,11 +475,21 @@ class PeopleCounterApp:
             threading.Thread(target=self._send_data_async, args=(data_to_send,), daemon=True).start()
 
         self.processor.reset()
+        if 'in_count_val' in self.widgets:
+            self.widgets['in_count_val'].set("0")
+        if 'out_count_val' in self.widgets:
+            self.widgets['out_count_val'].set("0")
+        if 'in_frame_val' in self.widgets:
+            self.widgets['in_frame_val'].set("0")
+        if 'net_flow_val' in self.widgets:
+            self.widgets['net_flow_val'].set("0")
         self.widgets['in_count_var'].set("IN: 0")
         self.widgets['out_count_var'].set("OUT: 0")
         self.widgets['people_in_frame_var'].set("In Frame: 0")
         self.update_status("Processing stopped. Ready.")
         self.logger.info("Processing stopped.")
+        # Reload preview frame so user still sees the video/webcam and counting line
+        self.root.after(100, self.load_first_frame)
 
     def video_loop(self):
         log_interval = 1.0

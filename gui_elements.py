@@ -239,13 +239,30 @@ def build_right_video_panel(parent_frame, callbacks):
     """
     Builds the right panel containing the video monitor,
     crosshair support, and modern video playback controls with frame stepping.
+    Uses grid layout so playback controls dock reliably at the bottom.
     """
     widgets = {}
 
-    # Playback Controls Frame (Packed at bottom)
+    parent_frame.grid_rowconfigure(0, weight=1)
+    parent_frame.grid_rowconfigure(1, weight=0)
+    parent_frame.grid_columnconfigure(0, weight=1)
+
+    # Video Monitor Display (Row 0, expands to fill)
+    video_container = tk.Frame(parent_frame, bg="#090D16", highlightbackground="#334155", highlightthickness=1)
+    video_container.grid(row=0, column=0, sticky='nsew')
+
+    widgets['video_label'] = tk.Label(
+        video_container, text="Video feed standby. Select a source and click Start.",
+        font=("Segoe UI", 11), fg="#64748B", bg="#090D16", anchor='center'
+    )
+    widgets['video_label'].pack(fill='both', expand=True)
+    widgets['video_label'].bind("<Button-1>", callbacks['handle_video_click'])
+    widgets['video_label'].bind("<Configure>", callbacks['on_video_label_configure'])
+
+    # Playback Controls Frame (Row 1, fixed height at bottom)
     playback_frame = tk.Frame(parent_frame, bg="#1E293B", padx=10, pady=6)
     widgets['playback_controls_frame'] = playback_frame
-    playback_frame.pack(side='bottom', fill='x', pady=(6, 0))
+    playback_frame.grid(row=1, column=0, sticky='ew', pady=(6, 0))
 
     # Backward -5s
     widgets['step_back_btn'] = ttk.Button(
@@ -284,18 +301,6 @@ def build_right_video_panel(parent_frame, callbacks):
         font=("Consolas", 9), fg="#94A3B8", bg="#1E293B"
     )
     widgets['timecode_lbl'].pack(side='right', padx=4)
-
-    # Video Monitor Display (Packed to fill remaining space)
-    video_container = tk.Frame(parent_frame, bg="#090D16", highlightbackground="#334155", highlightthickness=1)
-    video_container.pack(fill='both', expand=True, side='top')
-
-    widgets['video_label'] = tk.Label(
-        video_container, text="Video feed standby. Select a source and click Start.",
-        font=("Segoe UI", 11), fg="#64748B", bg="#090D16", anchor='center'
-    )
-    widgets['video_label'].pack(fill='both', expand=True)
-    widgets['video_label'].bind("<Button-1>", callbacks['handle_video_click'])
-    widgets['video_label'].bind("<Configure>", callbacks['on_video_label_configure'])
 
     return widgets
 
@@ -369,13 +374,13 @@ def build_settings_tab_content(parent_frame, api_endpoint_var, conf_var=None, mo
     widgets['tracker_dropdown'] = tracker_cb
 
     # Confidence Threshold
-    ttk.Label(ai_frame, text="Detection Confidence:").grid(row=2, column=0, sticky='w', padx=12, pady=8)
+    ttk.Label(ai_frame, text="Detection Confidence:").grid(row=2, column=0, sticky='w', padx=12, pady=6)
     conf_slider = ttk.Scale(ai_frame, from_=0.15, to=0.85, orient='horizontal', variable=conf_var)
-    conf_slider.grid(row=2, column=1, sticky='ew', padx=12, pady=8)
+    conf_slider.grid(row=2, column=1, sticky='ew', padx=12, pady=6)
     widgets['conf_slider'] = conf_slider
 
     conf_disp_lbl = tk.Label(ai_frame, text="45%", font=("Consolas", 10, "bold"), fg="#38BDF8", bg="#1E293B")
-    conf_disp_lbl.grid(row=2, column=2, sticky='w', padx=8, pady=8)
+    conf_disp_lbl.grid(row=2, column=2, sticky='w', padx=8, pady=6)
     widgets['conf_disp_lbl'] = conf_disp_lbl
 
     if conf_var:
@@ -387,6 +392,25 @@ def build_settings_tab_content(parent_frame, api_endpoint_var, conf_var=None, mo
                 pass
         conf_var.trace_add("write", _update_conf_disp)
         _update_conf_disp()
+
+    # Guidance row and Default Reset button
+    hint_row = tk.Frame(ai_frame, bg="#1E293B")
+    hint_row.grid(row=3, column=1, columnspan=2, sticky='w', padx=12, pady=(0, 8))
+    tk.Label(
+        hint_row, text="Optimal: 40% - 50%. Setting above 70% may cause missed detections.",
+        font=("Segoe UI", 8), fg="#94A3B8", bg="#1E293B"
+    ).pack(side='left')
+
+    def _reset_default_conf():
+        if conf_var:
+            conf_var.set(0.45)
+
+    widgets['reset_conf_btn'] = ttk.Button(
+        hint_row, text="↺ Reset (45%)",
+        command=_reset_default_conf,
+        style="Secondary.TButton"
+    )
+    widgets['reset_conf_btn'].pack(side='left', padx=(10, 0))
 
     ai_frame.grid_columnconfigure(1, weight=1)
 

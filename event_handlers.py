@@ -26,22 +26,28 @@ class EventHandlers:
         self.app.widgets['ip_entry'].configure(state='normal' if source == "ipcam" else 'disabled')
         self.app.widgets['webcam_dropdown'].configure(state='readonly' if source == "webcam" else 'disabled')
 
-        # Control playback controls frame visibility
-        if source == "video":
-            self.app.widgets['playback_controls_frame'].pack(fill='x', pady=(5,0))
-            self.app.widgets['play_pause_btn'].config(state='normal')
-            self.app.widgets['seek_slider'].config(state='normal')
-            if not self.app.running and self.app.video_display_manager is not None:
-                 self.app.load_first_frame()
-        else:
-            self.app.widgets['playback_controls_frame'].pack_forget()
-            self.app.widgets['play_pause_btn'].config(state='disabled')
-            self.app.widgets['seek_slider'].config(state='disabled')
-            if not self.app.running and self.app.video_display_manager is not None:
-                self.app.video_display_manager.clear_display()
+        # Control playback controls frame visibility with grid
+        if 'playback_controls_frame' in self.app.widgets:
+            if source == "video":
+                self.app.widgets['playback_controls_frame'].grid()
+                self.app.widgets['play_pause_btn'].config(state='normal')
+                self.app.widgets['seek_slider'].config(state='normal')
+            else:
+                self.app.widgets['playback_controls_frame'].grid_remove()
+                self.app.widgets['play_pause_btn'].config(state='disabled')
+                self.app.widgets['seek_slider'].config(state='disabled')
 
+        # Load live preview for video or webcam
+        if not self.app.running and self.app.video_display_manager is not None:
+            if source in ("video", "webcam"):
+                self.app.load_first_frame()
+            elif source == "ipcam":
+                if self.app.ip_url_var.get().strip():
+                    self.app.load_first_frame()
+                else:
+                    self.app.video_display_manager.clear_display("Enter IP camera stream URL.")
 
-        self.app.update_status(f"Source changed to: {source}")
+        self.app.update_status(f"Source: {source}")
         self.app.logger.info(f"Source changed to: {source}")
 
 

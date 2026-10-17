@@ -170,23 +170,32 @@ class VideoProcessor:
                     data['cooldown'] -= 1
 
                 if data['cooldown'] == 0:
-                    # Check both exact 2D segment intersection and side sign-flip
+                    # Check both exact 2D segment intersection and side sign-flip within segment span
                     intersected = self._segments_intersect(p1, p2, prev_center, curr_center)
                     sign_flipped = (last_side > 0 and side < 0) or (last_side < 0 and side > 0)
 
-                    if intersected or sign_flipped:
+                    min_x = min(p1[0], p2[0]) - 50
+                    max_x = max(p1[0], p2[0]) + 50
+                    min_y = min(p1[1], p2[1]) - 50
+                    max_y = max(p1[1], p2[1]) + 50
+                    within_span = (min_x <= curr_center[0] <= max_x) and (min_y <= curr_center[1] <= max_y)
+
+                    if intersected or (sign_flipped and within_span):
                         motion_vec = np.array(curr_center) - np.array(prev_center)
                         motion_side = np.dot(motion_vec, self.line_normal)
 
                         is_in = motion_side < 0 if not self.direction_swapped else motion_side > 0
 
+                        line_pt1 = (int(p1[0]), int(p1[1]))
+                        line_pt2 = (int(p2[0]), int(p2[1]))
+
                         if is_in:
                             self.counter_in += 1
-                            cv2.line(annotated_frame, self.line_coords[0], self.line_coords[1], (0, 255, 0), 4)
+                            cv2.line(annotated_frame, line_pt1, line_pt2, (0, 255, 0), 4)
                             data['cooldown'] = self.COOLDOWN_FRAMES
                         else:
                             self.counter_out += 1
-                            cv2.line(annotated_frame, self.line_coords[0], self.line_coords[1], (0, 0, 255), 4)
+                            cv2.line(annotated_frame, line_pt1, line_pt2, (0, 0, 255), 4)
                             data['cooldown'] = self.COOLDOWN_FRAMES
 
                 data['pos'] = curr_center
