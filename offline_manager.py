@@ -98,3 +98,59 @@ class OfflineManager:
         finally:
             if conn:
                 conn.close()
+
+    def export_to_csv(self, file_path):
+        """Exports all cached records to a CSV file."""
+        import csv
+        conn = None
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, payload, created_at FROM pending_logs ORDER BY id ASC")
+            rows = cursor.fetchall()
+            
+            with open(file_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(["Queue_ID", "Batch_Created_At", "Track_ID", "Object_Type", "Direction", "Event_Timestamp"])
+                count = 0
+                for row_id, payload_str, created_at in rows:
+                    try:
+                        items = json.loads(payload_str)
+                        if isinstance(items, list):
+                            for it in items:
+                                writer.writerow([
+                                    row_id,
+                                    created_at,
+                                    it.get("id", it.get("track_id", "")),
+                                    it.get("class", "person"),
+                                    it.get("direction", ""),
+                                    it.get("timestamp", "")
+                                ])
+                                count += 1
+                        else:
+                            writer.writerow([row_id, created_at, "", "", "", str(items)])
+                            count += 1
+                    except Exception:
+                        writer.writerow([row_id, created_at, "", "", "", payload_str])
+                        count += 1
+            return True, count
+        except Exception as e:
+            return False, str(e)
+        finally:
+            if conn:
+                conn.close()
+
+    def clear_all(self):
+        """Clears all queued offline logs."""
+        conn = None
+        try:
+            conn = self._get_connection()
+            conn.execute("DELETE FROM pending_logs")
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error clearing offline database: {e}")
+            return False
+        finally:
+            if conn:
+                conn.close()

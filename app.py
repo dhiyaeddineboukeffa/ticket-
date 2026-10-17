@@ -84,29 +84,62 @@ class PeopleCounterApp:
         self.event_handlers.on_source_change()
 
     def _configure_styles(self):
-        """Configures ttk styles for the application."""
-        self.style.configure("TFrame", background="#F0F8FF")
-        self.style.configure("TLabelframe", background="#F0F8FF", borderwidth=2, relief="groove")
-        self.style.configure("TLabelframe.Label", background="#F0F8FF", font=("Helvetica", 10, "bold"))
-
-        self.style.configure("TLabel", background="#F0F8FF", font=("Helvetica", 10))
-        self.style.configure("Bold.TLabel", font=("Helvetica", 16, "bold"))
-        self.style.configure("Count.TLabel", font=("Helvetica", 16, "bold"))
-        self.style.configure("Status.TLabel", background="#F0F8FF", font=("Helvetica", 9), foreground="gray")
-        self.style.configure("Error.Status.TLabel", background="#F0F8FF", font=("Helvetica", 9, "bold"), foreground="red")
-
-        self.style.configure("TButton", padding=8, font=("Helvetica", 10), background="#4682B4", foreground="white", relief="raised", borderwidth=2)
-        self.style.map("TButton", background=[("active", "#5499C7"), ("disabled", "grey")], foreground=[("disabled", "lightgrey")])
-
-        self.style.configure("TRadiobutton", background="#F0F8FF", font=("Helvetica", 10))
-        self.style.configure("TEntry", padding=5, font=("Helvetica", 10))
-        self.style.configure("Horizontal.TProgressbar", thickness=10, troughcolor='lightgray', background='#4CAF50')
+        """Configures dark slate ttk styles for the modern operations console."""
+        self.root.configure(bg="#0F172A")
+        
+        self.style.configure(".", background="#0F172A", foreground="#F8FAFC")
+        self.style.configure("TFrame", background="#0F172A")
+        self.style.configure("LeftPanel.TFrame", background="#0F172A")
+        self.style.configure("Card.TFrame", background="#1E293B")
+        
+        self.style.configure("TLabelframe", background="#1E293B", bordercolor="#334155", relief="flat")
+        self.style.configure("TLabelframe.Label", background="#1E293B", foreground="#38BDF8", font=("Segoe UI", 9, "bold"))
+        
+        self.style.configure("TLabel", background="#1E293B", foreground="#F8FAFC", font=("Segoe UI", 9))
+        self.style.configure("Bold.TLabel", background="#1E293B", foreground="#F8FAFC", font=("Segoe UI", 12, "bold"))
+        self.style.configure("Count.TLabel", background="#1E293B", font=("Consolas", 18, "bold"))
+        self.style.configure("Status.TLabel", background="#0F172A", font=("Segoe UI", 9), foreground="#38BDF8")
+        self.style.configure("Error.Status.TLabel", background="#0F172A", font=("Segoe UI", 9, "bold"), foreground="#EF4444")
+        
+        self.style.configure("TNotebook", background="#0F172A", borderwidth=0)
+        self.style.configure("TNotebook.Tab", background="#1E293B", foreground="#94A3B8", padding=[14, 6], font=("Segoe UI", 9, "bold"))
+        self.style.map("TNotebook.Tab", background=[("selected", "#2563EB")], foreground=[("selected", "#FFFFFF")])
+        
+        # Action Buttons
+        self.style.configure("TButton", background="#334155", foreground="#FFFFFF", borderwidth=0, padding=5, font=("Segoe UI", 9, "bold"))
+        self.style.map("TButton", background=[("active", "#475569"), ("disabled", "#1E293B")], foreground=[("disabled", "#64748B")])
+        
+        self.style.configure("Primary.TButton", background="#2563EB", foreground="#FFFFFF", borderwidth=0, padding=5, font=("Segoe UI", 9, "bold"))
+        self.style.map("Primary.TButton", background=[("active", "#1D4ED8"), ("disabled", "#1E293B")], foreground=[("disabled", "#64748B")])
+        
+        self.style.configure("Secondary.TButton", background="#334155", foreground="#F8FAFC", borderwidth=0, padding=4, font=("Segoe UI", 9))
+        self.style.map("Secondary.TButton", background=[("active", "#475569"), ("disabled", "#1E293B")], foreground=[("disabled", "#64748B")])
+        
+        self.style.configure("Start.TButton", background="#10B981", foreground="#FFFFFF", borderwidth=0, padding=6, font=("Segoe UI", 10, "bold"))
+        self.style.map("Start.TButton", background=[("active", "#059669"), ("disabled", "#1E293B")], foreground=[("disabled", "#64748B")])
+        
+        self.style.configure("Stop.TButton", background="#EF4444", foreground="#FFFFFF", borderwidth=0, padding=6, font=("Segoe UI", 10, "bold"))
+        self.style.map("Stop.TButton", background=[("active", "#DC2626"), ("disabled", "#1E293B")], foreground=[("disabled", "#64748B")])
+        
+        self.style.configure("TRadiobutton", background="#1E293B", foreground="#F8FAFC", font=("Segoe UI", 9))
+        self.style.map("TRadiobutton", background=[("active", "#1E293B")], foreground=[("active", "#38BDF8")])
+        
+        self.style.configure("TEntry", fieldbackground="#0F172A", foreground="#F8FAFC", bordercolor="#334155", insertcolor="#FFFFFF")
+        self.style.configure("TCombobox", fieldbackground="#0F172A", background="#334155", foreground="#F8FAFC", arrowcolor="#F8FAFC", bordercolor="#334155")
+        self.style.map("TCombobox", fieldbackground=[("readonly", "#0F172A")], selectbackground=[("readonly", "#1E293B")], selectforeground=[("readonly", "#38BDF8")])
+        
+        self.style.configure("Horizontal.TProgressbar", thickness=4, troughcolor="#1E293B", background="#10B981", bordercolor="#334155")
+        self.style.configure("Horizontal.TScale", background="#1E293B", troughcolor="#0F172A", sliderlength=14, bordercolor="#334155")
 
     def _build_ui(self):
         """Assembles the UI using components from gui_elements.py."""
+        self.root.title("People Counter Pro v2.0 - AI Vision Analytics")
+        self.root.bind("<Escape>", self.event_handlers.cancel_drawing)
+        self.root.bind("<space>", lambda e: self.event_handlers.toggle_playback())
+
         # Main notebook for tabs
         self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(fill='both', expand=True, padx=10, pady=10)
+        self.notebook.pack(fill='both', expand=True, padx=8, pady=8)
 
         main_tab_frame, settings_tab_frame = gui_elements.build_notebook_tabs(self.root, self.notebook)
         
@@ -118,7 +151,7 @@ class PeopleCounterApp:
         main_frame.grid_columnconfigure(1, weight=1)
 
         left_panel = ttk.Frame(main_frame)
-        left_panel.grid(row=0, column=0, sticky='nsew', padx=(0, 10))
+        left_panel.grid(row=0, column=0, sticky='nsew', padx=(0, 8))
 
         right_panel = ttk.Frame(main_frame)
         right_panel.grid(row=0, column=1, sticky='nsew')
@@ -129,7 +162,10 @@ class PeopleCounterApp:
             'select_file': self.event_handlers.select_file,
             'on_webcam_selected': self.event_handlers.on_webcam_selected,
             'start_drawing': self.event_handlers.start_drawing,
+            'cancel_drawing': self.event_handlers.cancel_drawing,
+            'clear_line': self.event_handlers.clear_line,
             'switch_direction': self.event_handlers.switch_direction,
+            'reset_counts': self.event_handlers.reset_counts,
             'start_processing': self.event_handlers.start_processing,
             'stop_processing': self.event_handlers.stop_processing,
             'on_left_canvas_configure': self.event_handlers.on_left_canvas_configure
@@ -143,6 +179,7 @@ class PeopleCounterApp:
         right_panel_callbacks = {
             'toggle_playback': self.event_handlers.toggle_playback,
             'on_seek_slider_moved': self.event_handlers.on_seek_slider_moved,
+            'step_video_seconds': self.event_handlers.step_video_seconds,
             'handle_video_click': self.event_handlers.handle_video_click,
             'on_video_label_configure': lambda e: None # Temporarily set, re-bound later
         }
@@ -150,12 +187,14 @@ class PeopleCounterApp:
 
         # Build status bar and progress bar (at root level)
         self.widgets.update(gui_elements.build_status_and_progress_bar(self.root))
-        self.widgets['progress_bar'].lower(self.notebook)
 
         # Build settings tab content, passing AI and API configuration
         settings_callbacks = {
             'on_model_change': self._on_model_selected,
-            'on_tracker_change': self._on_tracker_selected
+            'on_tracker_change': self._on_tracker_selected,
+            'test_api_connection': self.event_handlers.test_api_connection,
+            'sync_offline_cache': self.event_handlers.sync_offline_cache,
+            'export_offline_csv': self.event_handlers.export_offline_csv
         }
         self.conf_var.trace_add("write", self._on_conf_changed)
 
@@ -221,6 +260,10 @@ class PeopleCounterApp:
 
         # Load API Endpoint from settings
         self.api_endpoint_var.set(settings.get("api_endpoint", "https://tramcreditalgeria.up.railway.app/api/transaction/Passenger"))
+
+        if 'offline_count_lbl' in self.widgets:
+            pending_count = self.offline_manager.get_pending_count()
+            self.widgets['offline_count_lbl'].config(text=f"{pending_count} records cached in SQLite")
 
         self.logger.info("Settings loaded.")
         self.update_status("Settings loaded.")
@@ -484,24 +527,55 @@ class PeopleCounterApp:
             self.root.after(0, self.stop_processing_logic)
 
     def _update_ui_frame(self, frame, in_c, out_c, people_in_frame):
-        """Updates live counts and renders video frame without queue flooding."""
+        """Updates live counts, performance stats, and renders video frame without queue flooding."""
         self._update_live_counts(in_c, out_c, people_in_frame)
         if hasattr(self.processor, 'last_fps') and 'perf_stats_var' in self.widgets:
-            dev_label = "GPU" if getattr(self.processor, 'device', '').startswith('cuda') else "CPU"
-            self.widgets['perf_stats_var'].set(f"FPS: {self.processor.last_fps:.1f} | {self.processor.last_latency_ms:.1f}ms ({dev_label})")
+            dev_label = "GPU (CUDA)" if getattr(self.processor, 'device', '').startswith('cuda') else "CPU"
+            self.widgets['perf_stats_var'].set(f"FPS: {self.processor.last_fps:.1f}  |  {self.processor.last_latency_ms:.1f}ms  |  {dev_label}")
+
+        # Update playback timecode if video file
+        if self.video_source_var.get() == "video" and 'timecode_lbl' in self.widgets and self.video_playback_controls.cap:
+            try:
+                pos = self.video_playback_controls.get_current_frame_pos()
+                total = self.video_playback_controls.get_total_frames()
+                props = self.video_playback_controls.get_video_properties()
+                fps = props.get('fps', 30.0) or 30.0
+                cur_sec = int(pos / fps)
+                tot_sec = int(total / fps)
+                self.widgets['timecode_lbl'].config(text=f"{cur_sec//60:02d}:{cur_sec%60:02d} / {tot_sec//60:02d}:{tot_sec%60:02d}")
+            except Exception:
+                pass
+
         self.video_display_manager.show_frame(frame, self.line_coords, self.processor, self.logger)
         self._ui_update_pending = False
 
     def _update_live_counts(self, in_c, out_c, people_in_frame):
-        """Updates the live count labels in the UI."""
-        self.widgets['in_count_var'].set(f"IN: {in_c}")
-        self.widgets['out_count_var'].set(f"OUT: {out_c}")
-        self.widgets['people_in_frame_var'].set(f"In Frame: {people_in_frame}")
+        """Updates the live count labels and KPI metric cards in the UI."""
+        # Structured KPI Cards
+        if 'in_count_val' in self.widgets:
+            self.widgets['in_count_val'].set(str(in_c))
+        if 'out_count_val' in self.widgets:
+            self.widgets['out_count_val'].set(str(out_c))
+        if 'in_frame_val' in self.widgets:
+            self.widgets['in_frame_val'].set(str(people_in_frame))
+        if 'net_flow_val' in self.widgets:
+            net = in_c - out_c
+            prefix = "+" if net > 0 else ""
+            self.widgets['net_flow_val'].set(f"{prefix}{net}")
 
+        # Legacy stringvars for backwards compatibility
+        if 'in_count_var' in self.widgets:
+            self.widgets['in_count_var'].set(f"IN: {in_c}")
+        if 'out_count_var' in self.widgets:
+            self.widgets['out_count_var'].set(f"OUT: {out_c}")
+        if 'people_in_frame_var' in self.widgets:
+            self.widgets['people_in_frame_var'].set(f"In Frame: {people_in_frame}")
 
     def update_status(self, message, is_error=False):
         """Updates the status bar with a message."""
-        self.widgets['status_label'].config(text=message, style="Error.Status.TLabel" if is_error else "Status.TLabel")
+        if 'status_label' in self.widgets:
+            color = "#EF4444" if is_error else "#38BDF8"
+            self.widgets['status_label'].config(text=f"● {message}", fg=color)
 
 
     def _send_data_async(self, payload):

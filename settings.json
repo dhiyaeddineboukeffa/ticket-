@@ -1,15 +1,15 @@
 {
     "line_coords": [
         [
-            607,
-            45
+            514,
+            109
         ],
         [
-            612,
-            444
+            520,
+            461
         ]
     ],
-    "direction_swapped": true,
+    "direction_swapped": false,
     "api_endpoint": "https://tramcreditalgeria.up.railway.app/api/transaction/Passenger",
     "video_source_type": "webcam",
     "video_path": "C:/Users/LagunaNL5A/Desktop/CODE/working project/background video - people - walking -.mp4",

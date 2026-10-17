@@ -66,12 +66,17 @@ class VideoDisplayManager:
             # Clamp coordinates to ensure they are within the frame bounds before drawing
             p0 = (max(0, min(line_coords[0][0], self.original_frame_width - 1)),
                   max(0, min(line_coords[0][1], self.original_frame_height - 1)))
-            cv2.circle(frame, p0, 5, (0, 0, 255), -1) # Start point
+            # Outer ring + inner white core for start point
+            cv2.circle(frame, p0, 7, (0, 0, 255), 2, cv2.LINE_AA)
+            cv2.circle(frame, p0, 3, (255, 255, 255), -1, cv2.LINE_AA)
 
             if len(line_coords) == 2:
                 p1 = (max(0, min(line_coords[1][0], self.original_frame_width - 1)),
                       max(0, min(line_coords[1][1], self.original_frame_height - 1)))
-                cv2.line(frame, p0, p1, (0, 255, 255), 2)
+                # Sleek neon yellow/cyan counting line
+                cv2.line(frame, p0, p1, (0, 242, 254), 3, cv2.LINE_AA)
+                cv2.circle(frame, p1, 7, (0, 0, 255), 2, cv2.LINE_AA)
+                cv2.circle(frame, p1, 3, (255, 255, 255), -1, cv2.LINE_AA)
 
                 # Draw the IN direction arrow if processor is provided
                 if processor:
@@ -80,25 +85,45 @@ class VideoDisplayManager:
                         mid_point = ((line_coords[0][0] + line_coords[1][0]) // 2,
                                      (line_coords[0][1] + line_coords[1][1]) // 2)
                         
+                        arrow_len = 28
                         arrow_start_point = (
-                            int(mid_point[0] - in_arrow_vector[0] * 20),
-                            int(mid_point[1] - in_arrow_vector[1] * 20)
+                            int(mid_point[0] - in_arrow_vector[0] * arrow_len),
+                            int(mid_point[1] - in_arrow_vector[1] * arrow_len)
                         )
                         arrow_end_point = (
-                            int(mid_point[0] + in_arrow_vector[0] * 20),
-                            int(mid_point[1] + in_arrow_vector[1] * 20)
+                            int(mid_point[0] + in_arrow_vector[0] * arrow_len),
+                            int(mid_point[1] + in_arrow_vector[1] * arrow_len)
                         )
-                        cv2.arrowedLine(frame, arrow_start_point, arrow_end_point, (0, 255, 0), 3, tipLength=0.4)
-                        cv2.putText(frame, "IN", (arrow_end_point[0]+5, arrow_end_point[1]+5), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                        cv2.putText(frame, "OUT", (arrow_start_point[0]-50, arrow_start_point[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                        cv2.arrowedLine(frame, arrow_start_point, arrow_end_point, (16, 185, 129), 3, tipLength=0.35)
+                        
+                        # Modern pill badges for IN and OUT
+                        # IN Badge (Emerald Green pill)
+                        in_x, in_y = arrow_end_point[0] + 6, arrow_end_point[1] - 10
+                        cv2.rectangle(frame, (in_x, in_y), (in_x + 36, in_y + 22), (16, 185, 129), -1)
+                        cv2.rectangle(frame, (in_x, in_y), (in_x + 36, in_y + 22), (255, 255, 255), 1)
+                        cv2.putText(frame, "IN", (in_x + 6, in_y + 16), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (255, 255, 255), 1, cv2.LINE_AA)
+                        
+                        # OUT Badge (Rose Red pill)
+                        out_x, out_y = arrow_start_point[0] - 46, arrow_start_point[1] - 10
+                        cv2.rectangle(frame, (out_x, out_y), (out_x + 44, out_y + 22), (239, 68, 68), -1)
+                        cv2.rectangle(frame, (out_x, out_y), (out_x + 44, out_y + 22), (255, 255, 255), 1)
+                        cv2.putText(frame, "OUT", (out_x + 6, out_y + 16), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (255, 255, 255), 1, cv2.LINE_AA)
 
-        # Draw Performance HUD if processor is active
+        # Draw Modern Performance HUD Pill
         if processor and hasattr(processor, 'last_fps') and processor.last_fps > 0:
-            dev_str = "GPU (CUDA)" if getattr(processor, 'device', '').startswith('cuda') else "CPU"
-            hud_text = f"FPS: {processor.last_fps:.1f} | {processor.last_latency_ms:.1f}ms | {dev_str}"
-            cv2.rectangle(frame, (10, 10), (340, 40), (20, 20, 20), -1)
-            cv2.rectangle(frame, (10, 10), (340, 40), (70, 130, 180), 1)
-            cv2.putText(frame, hud_text, (16, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (240, 248, 255), 1, cv2.LINE_AA)
+            is_gpu = getattr(processor, 'device', '').startswith('cuda')
+            dev_str = "GPU (CUDA)" if is_gpu else "CPU"
+            hud_text = f"FPS: {processor.last_fps:.1f}   |   {processor.last_latency_ms:.1f}ms   |   {dev_str}"
+            
+            # Dark Slate Pill Container
+            cv2.rectangle(frame, (14, 14), (370, 46), (15, 23, 42), -1)
+            border_color = (16, 185, 129) if is_gpu else (59, 130, 246)
+            cv2.rectangle(frame, (14, 14), (370, 46), border_color, 1)
+            
+            # Pulsing status indicator dot
+            dot_color = (16, 185, 129) if is_gpu else (245, 158, 11)
+            cv2.circle(frame, (28, 30), 5, dot_color, -1, cv2.LINE_AA)
+            cv2.putText(frame, hud_text, (42, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (248, 250, 252), 1, cv2.LINE_AA)
 
 
         # Calculate aspect ratios
@@ -137,10 +162,13 @@ class VideoDisplayManager:
         self.video_label.imgtk = imgtk # Keep a reference to prevent garbage collection
         self.video_label.configure(image=imgtk)
 
-    def clear_display(self, default_text="Video feed will appear here."):
+    def clear_display(self, default_text="Video feed standby. Select a source and click Start."):
         """Clears the video display."""
         self.video_label.config(image='')
-        self.video_label.config(text=default_text, style="Bold.TLabel")
+        try:
+            self.video_label.config(text=default_text, fg="#64748B", bg="#090D16")
+        except Exception:
+            self.video_label.config(text=default_text)
         self.original_frame_width = None
         self.original_frame_height = None
         self.displayed_frame_width = None

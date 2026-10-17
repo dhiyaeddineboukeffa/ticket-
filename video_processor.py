@@ -88,6 +88,11 @@ class VideoProcessor:
         self.people_in_frame = 0
         self._fps_history.clear()
 
+    def reset_counters(self):
+        """Resets the IN and OUT counters without resetting the model or tracking state."""
+        self.counter_in = 0
+        self.counter_out = 0
+
     @staticmethod
     def _ccw(A, B, C):
         """Tests whether the turn from point A to B to C is counter-clockwise."""
