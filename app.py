@@ -46,6 +46,8 @@ class PeopleCounterApp:
         self.line_coords = []
 
         self.log_data = [] # Data collected for API export
+        self._log_lock = threading.Lock()
+        self._ui_update_pending = False
         self.start_time = None
         self.video_thread = None
 
@@ -176,10 +178,18 @@ class PeopleCounterApp:
         self.update_status("Settings loaded.")
 
     def update_webcam_list(self):
-        """Populates the webcam dropdown with available camera indices."""
+        """Starts asynchronous detection of webcams to prevent UI freeze on startup."""
         self.logger.info("Detecting webcams...")
         self.update_status("Detecting webcams...")
+        threading.Thread(target=self._run_webcam_detection, daemon=True).start()
+
+    def _run_webcam_detection(self):
+        """Runs webcam discovery in a background thread."""
         available_cams = self.camera_manager.get_available_webcams()
+        self.root.after(0, lambda: self._apply_webcam_list(available_cams))
+
+    def _apply_webcam_list(self, available_cams):
+        """Applies detected webcams to the dropdown widget on the main thread."""
         if not available_cams:
             self.widgets['webcam_dropdown']['values'] = ["No cameras found"]
             self.webcam_index_var.set("N/A")
@@ -353,11 +363,14 @@ class PeopleCounterApp:
             self.cap = None
         self.video_playback_controls.release()
 
-        if self.log_data:
-            self.send_data_to_api() # Changed: Send collected data to API
+        with self._log_lock:
+            data_to_send = list(self.log_data)
+            self.log_data.clear()
+
+        if data_to_send:
+            threading.Thread(target=self._send_data_async, args=(data_to_send,), daemon=True).start()
 
         self.processor.reset()
-        self.log_data.clear()
         self.widgets['in_count_var'].set("IN: 0")
         self.widgets['out_count_var'].set("OUT: 0")
         self.widgets['people_in_frame_var'].set("In Frame: 0")
@@ -376,13 +389,8 @@ class PeopleCounterApp:
                 if self.video_playback_controls.is_playing():
                     ret, frame = self.video_playback_controls.get_frame()
                 else:
-                    current_pos = self.video_playback_controls.get_current_frame_pos()
-                    self.video_playback_controls.set_frame_pos(current_pos)
-                    ret, frame = self.video_playback_controls.cap.read() if self.video_playback_controls.cap else (False, None)
-                    if not ret:
-                        self.logger.warning("Failed to read frame in paused state, stopping.")
-                        self.root.after(0, self.stop_processing_logic)
-                        break
+                    time.sleep(0.1) # Idle while paused — prevents 100% CPU/GPU spin
+                    continue
 
                 if ret and self.video_playback_controls.cap:
                     current_frame_pos = self.video_playback_controls.get_current_frame_pos()
@@ -407,25 +415,31 @@ class PeopleCounterApp:
                 break
 
             frame, in_c, out_c, people_in_frame = self.processor.process_frame(frame)
-            self.root.after(0, lambda i=in_c, o=out_c, p=people_in_frame: self._update_live_counts(i, o, p))
-
-            self.root.after(0, lambda f=frame: self.video_display_manager.show_frame(f, self.line_coords, self.processor, self.logger))
-
+            if not self._ui_update_pending:
+                self._ui_update_pending = True
+                self.root.after(0, lambda f=frame, i=in_c, o=out_c, p=people_in_frame: self._update_ui_frame(f, i, o, p))
 
             if time.time() - last_log_time >= log_interval:
                 # Store data in the new format for API
                 timestamp_iso = datetime.now().isoformat(timespec='seconds') # ISO format string
-                self.log_data.append({
-                    'createdAt': timestamp_iso, # Renamed from 'timestamp'
-                    'in': self.processor.counter_in,
-                    'out': self.processor.counter_out,
-                    'inFrame': self.processor.people_in_frame # Renamed from 'in_frame'
-                })
+                with self._log_lock:
+                    self.log_data.append({
+                        'createdAt': timestamp_iso, # Renamed from 'timestamp'
+                        'in': self.processor.counter_in,
+                        'out': self.processor.counter_out,
+                        'inFrame': self.processor.people_in_frame # Renamed from 'in_frame'
+                    })
                 last_log_time = time.time()
                 self.logger.debug(f"Logged data: createdAt={timestamp_iso}, IN={in_c}, OUT={out_c}, InFrame={people_in_frame}")
 
         if self.running:
             self.root.after(0, self.stop_processing_logic)
+
+    def _update_ui_frame(self, frame, in_c, out_c, people_in_frame):
+        """Updates live counts and renders video frame without queue flooding."""
+        self._update_live_counts(in_c, out_c, people_in_frame)
+        self.video_display_manager.show_frame(frame, self.line_coords, self.processor, self.logger)
+        self._ui_update_pending = False
 
     def _update_live_counts(self, in_c, out_c, people_in_frame):
         """Updates the live count labels in the UI."""
@@ -439,52 +453,50 @@ class PeopleCounterApp:
         self.widgets['status_label'].config(text=message, style="Error.Status.TLabel" if is_error else "Status.TLabel")
 
 
-    def send_data_to_api(self):
-        """Sends collected session data to the specified API endpoint."""
-        if not self.log_data:
-            self.logger.info("No log data to send to API for this session.")
-            self.update_status("No data to send to API.", is_error=False)
-            return
-        
+    def _send_data_async(self, payload):
+        """Sends collected session data to the specified API endpoint in a background thread."""
         api_url = self.api_endpoint_var.get()
         if not api_url:
-            messagebox.showwarning("API Error", "The API Endpoint URL is empty. Please set it in the Settings tab.")
             self.logger.warning("Attempted to send data but API endpoint is not configured.")
-            self.update_status("API endpoint not set.", is_error=True)
+            self.root.after(0, lambda: messagebox.showwarning("API Error", "The API Endpoint URL is empty. Please set it in the Settings tab."))
+            self.root.after(0, lambda: self.update_status("API endpoint not set.", is_error=True))
             return
 
         headers = {'Content-Type': 'application/json'}
-        
-        # The API expects an array of objects
-        payload = self.log_data
-
         self.logger.info(f"Attempting to send {len(payload)} data points to API: {api_url}")
-        self.update_status("Sending data to API...", is_error=False)
+        self.root.after(0, lambda: self.update_status("Sending data to API...", is_error=False))
 
         try:
             response = requests.post(api_url, json=payload, headers=headers, timeout=10) # 10 second timeout
-            response.raise_for_status() # Raises HTTPError for bad responses (4xx or 5xx)
-
+            response.raise_for_status()
             self.logger.info(f"Data successfully sent to API. Status Code: {response.status_code}")
-            self.update_status("Data sent to API successfully!", is_error=False)
-            # print("API Response:", response.json()) # Uncomment for debugging API response
-
+            self.root.after(0, lambda: self.update_status("Data sent to API successfully!", is_error=False))
         except requests.exceptions.Timeout:
-            messagebox.showerror("API Error", "Request timed out while sending data to API. Check network or API availability.")
             self.logger.error("API request timed out.")
-            self.update_status("API request timed out.", is_error=True)
+            self.root.after(0, lambda: messagebox.showerror("API Error", "Request timed out while sending data to API."))
+            self.root.after(0, lambda: self.update_status("API request timed out.", is_error=True))
         except requests.exceptions.ConnectionError as e:
-            messagebox.showerror("API Error", f"Failed to connect to API: {e}. Check network connection or API endpoint.")
             self.logger.error(f"API connection error: {e}")
-            self.update_status("API connection error.", is_error=True)
+            self.root.after(0, lambda: messagebox.showerror("API Error", f"Failed to connect to API: {e}"))
+            self.root.after(0, lambda: self.update_status("API connection error.", is_error=True))
         except requests.exceptions.HTTPError as e:
-            messagebox.showerror("API Error", f"HTTP error sending data: {e.response.status_code} - {e.response.text}")
             self.logger.error(f"API HTTP error: {e.response.status_code} - {e.response.text}")
-            self.update_status("API HTTP error.", is_error=True)
+            self.root.after(0, lambda: messagebox.showerror("API Error", f"HTTP error sending data: {e.response.status_code}"))
+            self.root.after(0, lambda: self.update_status("API HTTP error.", is_error=True))
         except Exception as e:
-            messagebox.showerror("API Error", f"An unexpected error occurred while sending data to API: {e}")
             self.logger.error(f"Unexpected API error: {e}")
-            self.update_status("Unexpected API error.", is_error=True)
+            self.root.after(0, lambda: messagebox.showerror("API Error", f"An unexpected error occurred: {e}"))
+            self.root.after(0, lambda: self.update_status("Unexpected API error.", is_error=True))
+
+    def send_data_to_api(self):
+        """Sends collected session data to the specified API endpoint."""
+        with self._log_lock:
+            data = list(self.log_data)
+        if not data:
+            self.logger.info("No log data to send to API for this session.")
+            self.update_status("No data to send to API.", is_error=False)
+            return
+        threading.Thread(target=self._send_data_async, args=(data,), daemon=True).start()
 
     def on_closing(self):
         # Update settings with the current values from the UI

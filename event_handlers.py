@@ -31,13 +31,13 @@ class EventHandlers:
             self.app.widgets['playback_controls_frame'].pack(fill='x', pady=(5,0))
             self.app.widgets['play_pause_btn'].config(state='normal')
             self.app.widgets['seek_slider'].config(state='normal')
-            if not self.app.running: # If not running, load first frame for preview
+            if not self.app.running and self.app.video_display_manager is not None:
                  self.app.load_first_frame()
         else:
             self.app.widgets['playback_controls_frame'].pack_forget()
             self.app.widgets['play_pause_btn'].config(state='disabled')
             self.app.widgets['seek_slider'].config(state='disabled')
-            if not self.app.running: # If not running and switching from video, clear video display
+            if not self.app.running and self.app.video_display_manager is not None:
                 self.app.video_display_manager.clear_display()
 
 

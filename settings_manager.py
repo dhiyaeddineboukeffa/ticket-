@@ -47,5 +47,6 @@ class SettingsManager:
         return self.settings.get(key, self.default_settings.get(key))
 
     def update_setting(self, key, value):
-        """Updates a specific setting in the current settings dictionary."""
+        """Updates a specific setting and persists to disk immediately."""
         self.settings[key] = value
+        self.save_settings(self.settings)

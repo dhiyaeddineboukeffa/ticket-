@@ -109,4 +109,10 @@ class VideoProcessor:
                 
                 self.track_history[track_id][0] = side
 
+        # Prune track_history: remove IDs not in current frame to prevent memory leak
+        current_ids = set(track_ids)
+        stale_ids = [tid for tid in self.track_history if tid not in current_ids]
+        for tid in stale_ids:
+            del self.track_history[tid]
+
         return annotated_frame, self.counter_in, self.counter_out, self.people_in_frame
