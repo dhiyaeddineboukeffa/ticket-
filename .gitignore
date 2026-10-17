@@ -23,3 +23,7 @@ desktop.ini
 .idea/
 .vscode/
 *.swp
+
+# SQLite database files
+*.db
+*.sqlite3

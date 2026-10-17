@@ -11,7 +11,10 @@ class SettingsManager:
             "video_source_type": "video", 
             "video_path": "",            
             "ip_url": "",                
-            "webcam_index": 0            
+            "webcam_index": 0,
+            "conf_threshold": 0.45,
+            "model_name": "yolov8n.pt",
+            "tracker_type": "bytetrack.yaml"
         }
         self.settings = self.default_settings.copy() # Initialize with defaults
 

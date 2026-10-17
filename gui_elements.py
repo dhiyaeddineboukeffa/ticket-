@@ -88,9 +88,11 @@ def build_left_control_panel(parent_frame, video_source_var, video_path_var,
     widgets['in_count_var'] = tk.StringVar(value="IN: 0")
     widgets['out_count_var'] = tk.StringVar(value="OUT: 0")
     widgets['people_in_frame_var'] = tk.StringVar(value="In Frame: 0")
-    ttk.Label(count_frame, textvariable=widgets['in_count_var'], style="Count.TLabel", foreground="green").pack(padx=5, pady=5)
-    ttk.Label(count_frame, textvariable=widgets['out_count_var'], style="Count.TLabel", foreground="red").pack(padx=5, pady=5)
-    ttk.Label(count_frame, textvariable=widgets['people_in_frame_var'], style="Count.TLabel", foreground="blue").pack(padx=5, pady=5)
+    widgets['perf_stats_var'] = tk.StringVar(value="Performance: Ready")
+    ttk.Label(count_frame, textvariable=widgets['in_count_var'], style="Count.TLabel", foreground="green").pack(padx=5, pady=3)
+    ttk.Label(count_frame, textvariable=widgets['out_count_var'], style="Count.TLabel", foreground="red").pack(padx=5, pady=3)
+    ttk.Label(count_frame, textvariable=widgets['people_in_frame_var'], style="Count.TLabel", foreground="blue").pack(padx=5, pady=3)
+    ttk.Label(count_frame, textvariable=widgets['perf_stats_var'], style="Status.TLabel").pack(padx=5, pady=(2, 5))
 
     widgets['left_canvas'] = left_canvas # Store canvas reference
     widgets['scrollable_content_frame'] = scrollable_content_frame # Store inner frame reference
@@ -137,23 +139,64 @@ def build_status_and_progress_bar(parent_root):
 
     return widgets
 
-def build_settings_tab_content(parent_frame, api_endpoint_var):
+def build_settings_tab_content(parent_frame, api_endpoint_var, conf_var=None, model_var=None, tracker_var=None, callbacks=None):
     """
-    Builds the content for the settings tab, allowing the API endpoint to be edited.
+    Builds the content for the settings tab: AI model, tracker, confidence threshold, and API settings.
     Returns a dictionary of relevant widgets.
     """
     widgets = {}
+
+    # 1. Detection & AI Settings
+    ai_frame = ttk.LabelFrame(parent_frame, text="AI Model & Tracker Settings")
+    ai_frame.pack(fill='x', expand=False, padx=20, pady=(15, 10))
+
+    # Model Selection
+    ttk.Label(ai_frame, text="YOLO Model:").grid(row=0, column=0, sticky='w', padx=10, pady=8)
+    model_cb = ttk.Combobox(ai_frame, textvariable=model_var, values=["yolov8n.pt", "yolov8s.pt"], state='readonly', width=18)
+    model_cb.grid(row=0, column=1, sticky='w', padx=10, pady=8)
+    if callbacks and 'on_model_change' in callbacks:
+        model_cb.bind("<<ComboboxSelected>>", callbacks['on_model_change'])
+    widgets['model_dropdown'] = model_cb
+
+    # Tracker Selection
+    ttk.Label(ai_frame, text="Tracker Algorithm:").grid(row=1, column=0, sticky='w', padx=10, pady=8)
+    tracker_cb = ttk.Combobox(ai_frame, textvariable=tracker_var, values=["bytetrack.yaml", "botsort.yaml"], state='readonly', width=18)
+    tracker_cb.grid(row=1, column=1, sticky='w', padx=10, pady=8)
+    if callbacks and 'on_tracker_change' in callbacks:
+        tracker_cb.bind("<<ComboboxSelected>>", callbacks['on_tracker_change'])
+    widgets['tracker_dropdown'] = tracker_cb
+
+    # Confidence Threshold
+    ttk.Label(ai_frame, text="Detection Confidence:").grid(row=2, column=0, sticky='w', padx=10, pady=8)
+    conf_slider = ttk.Scale(ai_frame, from_=0.15, to=0.85, orient='horizontal', variable=conf_var)
+    conf_slider.grid(row=2, column=1, sticky='ew', padx=10, pady=8)
+    widgets['conf_slider'] = conf_slider
+
+    conf_disp_lbl = ttk.Label(ai_frame, text="45%")
+    conf_disp_lbl.grid(row=2, column=2, sticky='w', padx=5, pady=8)
+    widgets['conf_disp_lbl'] = conf_disp_lbl
+
+    if conf_var:
+        def _update_conf_disp(*args):
+            try:
+                val = int(float(conf_var.get()) * 100)
+                conf_disp_lbl.config(text=f"{val}%")
+            except Exception:
+                pass
+        conf_var.trace_add("write", _update_conf_disp)
+        _update_conf_disp()
+
+    ai_frame.grid_columnconfigure(1, weight=1)
+
+    # 2. API Settings
     api_settings_frame = ttk.LabelFrame(parent_frame, text="API Settings")
-    api_settings_frame.pack(fill='x', expand=False, padx=20, pady=20)
+    api_settings_frame.pack(fill='x', expand=False, padx=20, pady=10)
 
-    # Display the API Endpoint in an editable Entry widget
-    ttk.Label(api_settings_frame, text="API Endpoint URL:").grid(row=0, column=0, sticky='w', padx=5, pady=10)
-    
+    ttk.Label(api_settings_frame, text="API Endpoint URL:").grid(row=0, column=0, sticky='w', padx=10, pady=8)
     widgets['api_entry'] = ttk.Entry(api_settings_frame, textvariable=api_endpoint_var, width=80)
-    widgets['api_entry'].grid(row=0, column=1, sticky='ew', padx=5, pady=10)
+    widgets['api_entry'].grid(row=0, column=1, sticky='ew', padx=10, pady=8)
 
-    ttk.Label(api_settings_frame, text="(Data will be sent to this URL when processing stops)").grid(row=1, column=1, sticky='w', padx=5, pady=2)
-
+    ttk.Label(api_settings_frame, text="(Data is sent automatically upon stopping analysis; offline entries are cached locally in SQLite)").grid(row=1, column=1, sticky='w', padx=10, pady=2)
     api_settings_frame.grid_columnconfigure(1, weight=1)
 
     return widgets

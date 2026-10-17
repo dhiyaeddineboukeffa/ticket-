@@ -92,6 +92,14 @@ class VideoDisplayManager:
                         cv2.putText(frame, "IN", (arrow_end_point[0]+5, arrow_end_point[1]+5), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                         cv2.putText(frame, "OUT", (arrow_start_point[0]-50, arrow_start_point[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
+        # Draw Performance HUD if processor is active
+        if processor and hasattr(processor, 'last_fps') and processor.last_fps > 0:
+            dev_str = "GPU (CUDA)" if getattr(processor, 'device', '').startswith('cuda') else "CPU"
+            hud_text = f"FPS: {processor.last_fps:.1f} | {processor.last_latency_ms:.1f}ms | {dev_str}"
+            cv2.rectangle(frame, (10, 10), (340, 40), (20, 20, 20), -1)
+            cv2.rectangle(frame, (10, 10), (340, 40), (70, 130, 180), 1)
+            cv2.putText(frame, hud_text, (16, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (240, 248, 255), 1, cv2.LINE_AA)
+
 
         # Calculate aspect ratios
         aspect_ratio_orig = w_orig / h_orig

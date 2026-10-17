@@ -12,6 +12,7 @@ from video_playback_controls import VideoPlaybackControls
 from app_logger import AppLogger
 from settings_manager import SettingsManager
 from video_processor import VideoProcessor
+from offline_manager import OfflineManager
 
 # Import new UI-related modules
 import gui_elements
@@ -30,7 +31,8 @@ class PeopleCounterApp:
         self.logger = AppLogger()
         self.camera_manager = CameraManager()
         self.video_playback_controls = VideoPlaybackControls()
-        self.processor = VideoProcessor(model_path='yolov8n.pt', class_list_path='coco.txt')
+        self.processor = VideoProcessor(model_path='yolov8n.pt', class_list_path='coco.txt', conf_threshold=0.45, tracker_type='bytetrack.yaml')
+        self.offline_manager = OfflineManager()
 
         # --- State Variables (Tkinter StringVars for UI binding) ---
         self.video_source_var = tk.StringVar()
@@ -38,6 +40,9 @@ class PeopleCounterApp:
         self.ip_url_var = tk.StringVar()
         self.webcam_index_var = tk.IntVar(value=0)
         self.api_endpoint_var = tk.StringVar() 
+        self.conf_var = tk.DoubleVar(value=0.45)
+        self.model_var = tk.StringVar(value="yolov8n.pt")
+        self.tracker_var = tk.StringVar(value="bytetrack.yaml") 
 
         # --- Application Internal State ---
         self.cap = None
@@ -147,10 +152,39 @@ class PeopleCounterApp:
         self.widgets.update(gui_elements.build_status_and_progress_bar(self.root))
         self.widgets['progress_bar'].lower(self.notebook)
 
-        # Build settings tab content, passing the editable API endpoint variable
+        # Build settings tab content, passing AI and API configuration
+        settings_callbacks = {
+            'on_model_change': self._on_model_selected,
+            'on_tracker_change': self._on_tracker_selected
+        }
+        self.conf_var.trace_add("write", self._on_conf_changed)
+
         self.widgets.update(gui_elements.build_settings_tab_content(
-            settings_tab_frame, self.api_endpoint_var
+            settings_tab_frame, self.api_endpoint_var,
+            self.conf_var, self.model_var, self.tracker_var, settings_callbacks
         ))
+
+    def _on_model_selected(self, event=None):
+        selected_model = self.model_var.get()
+        self.processor.reload_model(selected_model)
+        self.settings_manager.update_setting("model_name", selected_model)
+        self.logger.info(f"YOLO Model switched to: {selected_model}")
+        self.update_status(f"Loaded model: {selected_model}")
+
+    def _on_tracker_selected(self, event=None):
+        selected_tracker = self.tracker_var.get()
+        self.processor.set_tracker(selected_tracker)
+        self.settings_manager.update_setting("tracker_type", selected_tracker)
+        self.logger.info(f"Tracker switched to: {selected_tracker}")
+        self.update_status(f"Using tracker: {selected_tracker}")
+
+    def _on_conf_changed(self, *args):
+        try:
+            val = float(self.conf_var.get())
+            self.processor.set_confidence(val)
+            self.settings_manager.update_setting("conf_threshold", val)
+        except Exception:
+            pass
 
     def load_initial_settings(self):
         """Loads settings from SettingsManager and applies them to UI."""
@@ -170,6 +204,20 @@ class PeopleCounterApp:
 
         direction_swapped = settings.get("direction_swapped", False)
         self.processor.set_direction_swapped(direction_swapped)
+
+        # AI & Tracker Settings
+        conf = float(settings.get("conf_threshold", 0.45))
+        self.conf_var.set(conf)
+        self.processor.set_confidence(conf)
+
+        model_name = settings.get("model_name", "yolov8n.pt")
+        self.model_var.set(model_name)
+        if model_name != self.processor.model_path:
+            self.processor.reload_model(model_name)
+
+        tracker_name = settings.get("tracker_type", "bytetrack.yaml")
+        self.tracker_var.set(tracker_name)
+        self.processor.set_tracker(tracker_name)
 
         # Load API Endpoint from settings
         self.api_endpoint_var.set(settings.get("api_endpoint", "https://tramcreditalgeria.up.railway.app/api/transaction/Passenger"))
@@ -438,6 +486,9 @@ class PeopleCounterApp:
     def _update_ui_frame(self, frame, in_c, out_c, people_in_frame):
         """Updates live counts and renders video frame without queue flooding."""
         self._update_live_counts(in_c, out_c, people_in_frame)
+        if hasattr(self.processor, 'last_fps') and 'perf_stats_var' in self.widgets:
+            dev_label = "GPU" if getattr(self.processor, 'device', '').startswith('cuda') else "CPU"
+            self.widgets['perf_stats_var'].set(f"FPS: {self.processor.last_fps:.1f} | {self.processor.last_latency_ms:.1f}ms ({dev_label})")
         self.video_display_manager.show_frame(frame, self.line_coords, self.processor, self.logger)
         self._ui_update_pending = False
 
@@ -457,36 +508,35 @@ class PeopleCounterApp:
         """Sends collected session data to the specified API endpoint in a background thread."""
         api_url = self.api_endpoint_var.get()
         if not api_url:
-            self.logger.warning("Attempted to send data but API endpoint is not configured.")
-            self.root.after(0, lambda: messagebox.showwarning("API Error", "The API Endpoint URL is empty. Please set it in the Settings tab."))
-            self.root.after(0, lambda: self.update_status("API endpoint not set.", is_error=True))
+            self.logger.warning("Attempted to send data but API endpoint is not configured. Saving offline.")
+            self.offline_manager.save_pending_payload(payload)
+            self.root.after(0, lambda: self.update_status("API not set. Data saved offline.", is_error=True))
             return
 
         headers = {'Content-Type': 'application/json'}
         self.logger.info(f"Attempting to send {len(payload)} data points to API: {api_url}")
         self.root.after(0, lambda: self.update_status("Sending data to API...", is_error=False))
 
+        # First flush any pending offline logs
+        pending = self.offline_manager.get_pending_payloads()
+        for rec_id, old_batch in pending:
+            try:
+                res = requests.post(api_url, json=old_batch, headers=headers, timeout=5)
+                if res.status_code < 400:
+                    self.offline_manager.remove_payload(rec_id)
+            except Exception:
+                break
+
         try:
-            response = requests.post(api_url, json=payload, headers=headers, timeout=10) # 10 second timeout
+            response = requests.post(api_url, json=payload, headers=headers, timeout=10)
             response.raise_for_status()
             self.logger.info(f"Data successfully sent to API. Status Code: {response.status_code}")
             self.root.after(0, lambda: self.update_status("Data sent to API successfully!", is_error=False))
-        except requests.exceptions.Timeout:
-            self.logger.error("API request timed out.")
-            self.root.after(0, lambda: messagebox.showerror("API Error", "Request timed out while sending data to API."))
-            self.root.after(0, lambda: self.update_status("API request timed out.", is_error=True))
-        except requests.exceptions.ConnectionError as e:
-            self.logger.error(f"API connection error: {e}")
-            self.root.after(0, lambda: messagebox.showerror("API Error", f"Failed to connect to API: {e}"))
-            self.root.after(0, lambda: self.update_status("API connection error.", is_error=True))
-        except requests.exceptions.HTTPError as e:
-            self.logger.error(f"API HTTP error: {e.response.status_code} - {e.response.text}")
-            self.root.after(0, lambda: messagebox.showerror("API Error", f"HTTP error sending data: {e.response.status_code}"))
-            self.root.after(0, lambda: self.update_status("API HTTP error.", is_error=True))
         except Exception as e:
-            self.logger.error(f"Unexpected API error: {e}")
-            self.root.after(0, lambda: messagebox.showerror("API Error", f"An unexpected error occurred: {e}"))
-            self.root.after(0, lambda: self.update_status("Unexpected API error.", is_error=True))
+            self.logger.warning(f"API request failed ({e}). Caching to offline SQLite database.")
+            self.offline_manager.save_pending_payload(payload)
+            pending_count = self.offline_manager.get_pending_count()
+            self.root.after(0, lambda: self.update_status(f"Saved to offline cache ({pending_count} batches queued).", is_error=True))
 
     def send_data_to_api(self):
         """Sends collected session data to the specified API endpoint."""
@@ -499,8 +549,11 @@ class PeopleCounterApp:
         threading.Thread(target=self._send_data_async, args=(data,), daemon=True).start()
 
     def on_closing(self):
-        # Update settings with the current values from the UI
+        # Update settings with current UI values
         self.settings_manager.update_setting("api_endpoint", self.api_endpoint_var.get())
+        self.settings_manager.update_setting("conf_threshold", float(self.conf_var.get()))
+        self.settings_manager.update_setting("model_name", self.model_var.get())
+        self.settings_manager.update_setting("tracker_type", self.tracker_var.get())
         
         self.settings_manager.save_settings(self.settings_manager.settings)
         if self.running:
