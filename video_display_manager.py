@@ -85,7 +85,7 @@ class VideoDisplayManager:
                         mid_point = ((line_coords[0][0] + line_coords[1][0]) // 2,
                                      (line_coords[0][1] + line_coords[1][1]) // 2)
                         
-                        arrow_len = 28
+                        arrow_len = 32
                         arrow_start_point = (
                             int(mid_point[0] - in_arrow_vector[0] * arrow_len),
                             int(mid_point[1] - in_arrow_vector[1] * arrow_len)
@@ -96,18 +96,34 @@ class VideoDisplayManager:
                         )
                         cv2.arrowedLine(frame, arrow_start_point, arrow_end_point, (16, 185, 129), 3, tipLength=0.35)
                         
-                        # Modern pill badges for IN and OUT
-                        # IN Badge (Emerald Green pill)
-                        in_x, in_y = arrow_end_point[0] + 6, arrow_end_point[1] - 10
-                        cv2.rectangle(frame, (in_x, in_y), (in_x + 36, in_y + 22), (16, 185, 129), -1)
-                        cv2.rectangle(frame, (in_x, in_y), (in_x + 36, in_y + 22), (255, 255, 255), 1)
-                        cv2.putText(frame, "IN", (in_x + 6, in_y + 16), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (255, 255, 255), 1, cv2.LINE_AA)
-                        
-                        # OUT Badge (Rose Red pill)
-                        out_x, out_y = arrow_start_point[0] - 46, arrow_start_point[1] - 10
-                        cv2.rectangle(frame, (out_x, out_y), (out_x + 44, out_y + 22), (239, 68, 68), -1)
-                        cv2.rectangle(frame, (out_x, out_y), (out_x + 44, out_y + 22), (255, 255, 255), 1)
-                        cv2.putText(frame, "OUT", (out_x + 6, out_y + 16), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (255, 255, 255), 1, cv2.LINE_AA)
+                        # Helper to draw centered pill badge
+                        def _draw_badge(badge_text, cx, cy, bg_bgr):
+                            font = cv2.FONT_HERSHEY_SIMPLEX
+                            font_scale = 0.50
+                            thickness = 1
+                            (tw, th), _ = cv2.getTextSize(badge_text, font, font_scale, thickness)
+                            pw, ph = tw + 18, th + 12
+                            bx1 = int(cx - pw / 2)
+                            by1 = int(cy - ph / 2)
+                            h_f, w_f = frame.shape[:2]
+                            bx1 = max(4, min(bx1, w_f - pw - 4))
+                            by1 = max(4, min(by1, h_f - ph - 4))
+                            bx2, by2 = bx1 + pw, by1 + ph
+                            cv2.rectangle(frame, (bx1, by1), (bx2, by2), bg_bgr, -1)
+                            cv2.rectangle(frame, (bx1, by1), (bx2, by2), (255, 255, 255), 1)
+                            tx = bx1 + 9
+                            ty = by1 + ph - 6
+                            cv2.putText(frame, badge_text, (tx, ty), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+
+                        # Place IN badge outward at arrow tip (destination side)
+                        in_cx = int(arrow_end_point[0] + in_arrow_vector[0] * 24)
+                        in_cy = int(arrow_end_point[1] + in_arrow_vector[1] * 24)
+                        _draw_badge("IN", in_cx, in_cy, (16, 185, 129))
+
+                        # Place OUT badge outward at arrow tail (source side)
+                        out_cx = int(arrow_start_point[0] - in_arrow_vector[0] * 24)
+                        out_cy = int(arrow_start_point[1] - in_arrow_vector[1] * 24)
+                        _draw_badge("OUT", out_cx, out_cy, (239, 68, 68))
 
         # Draw Modern Performance HUD Pill
         if processor and hasattr(processor, 'last_fps') and processor.last_fps > 0:
