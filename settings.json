@@ -1,21 +1,21 @@
 {
     "line_coords": [
         [
-            113,
-            74
+            168,
+            64
         ],
         [
-            114,
-            391
+            183,
+            455
         ]
     ],
     "direction_swapped": false,
     "api_endpoint": "https://tramcreditalgeria.up.railway.app/api/transaction/Passenger",
-    "video_source_type": "webcam",
-    "video_path": "C:/Users/LagunaNL5A/Desktop/CODE/working project/background video - people - walking -.mp4",
+    "video_source_type": "video",
+    "video_path": "background video - people - walking -.mp4",
     "ip_url": "",
     "webcam_index": 0,
-    "conf_threshold": 0.45,
+    "conf_threshold": 0.4547812817904374,
     "model_name": "yolov8n.pt",
     "tracker_type": "bytetrack.yaml"
 }

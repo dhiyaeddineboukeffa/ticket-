@@ -45,8 +45,10 @@ class SettingsManager:
         except Exception as e:
             print(f"Error: Failed to save settings to '{self.settings_file}': {e}")
 
-    def get_setting(self, key):
-        """Retrieves a specific setting by key."""
+    def get_setting(self, key, default=None):
+        """Retrieves a specific setting by key with optional fallback."""
+        if default is not None:
+            return self.settings.get(key, default)
         return self.settings.get(key, self.default_settings.get(key))
 
     def update_setting(self, key, value):

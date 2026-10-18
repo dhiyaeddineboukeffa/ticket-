@@ -69,7 +69,10 @@ class EventHandlers:
 
 
     def start_drawing(self):
-        if not self.app.cap:
+        if not self.app.cap and self.app.last_preview_frame is None:
+            self.app.load_first_frame()
+
+        if not self.app.cap and self.app.last_preview_frame is None:
             messagebox.showwarning("No Video Loaded", "Please load a video source (file, webcam, or IP camera) before drawing a line.")
             self.app.logger.warning("Attempted to draw line without video loaded.")
             self.app.update_status("Please load a video source first.", is_error=True)
@@ -82,8 +85,8 @@ class EventHandlers:
         if 'cancel_draw_btn' in self.app.widgets:
             self.app.widgets['cancel_draw_btn'].config(state='normal')
         self.app.widgets['instruction_label'].config(text="Click Point 1 on the video stream (Press ESC to Cancel).")
-        # Re-load first frame to clear previous line drawings if any
-        self.app.load_first_frame()
+        # Refresh preview frame to clear previous line drawings
+        self.app.refresh_preview()
         self.app.logger.info("Started line drawing mode.")
         self.app.update_status("Drawing line: Click Point 1 (Press ESC to cancel).")
 
@@ -103,8 +106,7 @@ class EventHandlers:
             self.app.widgets['instruction_label'].config(text="Drawing cancelled. Saved line restored.")
         else:
             self.app.widgets['instruction_label'].config(text="Drawing cancelled. No line set.")
-        if self.app.cap:
-            self.app.load_first_frame()
+        self.app.refresh_preview()
         self.app.logger.info("Line drawing cancelled.")
         self.app.update_status("Drawing cancelled.")
 
@@ -121,8 +123,7 @@ class EventHandlers:
         if 'cancel_draw_btn' in self.app.widgets:
             self.app.widgets['cancel_draw_btn'].config(state='disabled')
         self.app.widgets['instruction_label'].config(text="Line cleared. Click 'Draw New Line' to define.")
-        if self.app.cap:
-            self.app.load_first_frame()
+        self.app.refresh_preview()
         self.app.logger.info("Counting line cleared.")
         self.app.update_status("Counting line cleared.")
 
@@ -228,8 +229,8 @@ class EventHandlers:
         self.app.settings_manager.update_setting("direction_swapped", self.app.processor.direction_swapped)
         self.app.logger.info(f"Direction swapped: {'IN is now OUT and vice versa' if self.app.processor.direction_swapped else 'Default IN/OUT'}")
         self.app.update_status("IN/OUT direction switched.")
-        if not self.app.running and self.app.cap:
-            self.app.load_first_frame()
+        if not self.app.running:
+            self.app.refresh_preview()
 
     def step_video_seconds(self, seconds):
         """Steps forward or backward in video by given seconds."""

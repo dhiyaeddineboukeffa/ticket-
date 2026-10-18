@@ -49,6 +49,9 @@ class PeopleCounterApp:
         self.running = False
         self.drawing_line = False
         self.line_coords = []
+        self.last_preview_frame = None
+        self.active_source_type = "video"
+        self.active_api_url = ""
 
         self.log_data = [] # Data collected for API export
         self._log_lock = threading.Lock()
@@ -274,10 +277,18 @@ class PeopleCounterApp:
         self.update_status("Detecting webcams...")
         threading.Thread(target=self._run_webcam_detection, daemon=True).start()
 
+    def _safe_after(self, func, delay_ms=0):
+        """Thread-safe UI scheduler guarding against closed windows and Tkinter thread errors."""
+        try:
+            if self.root and self.root.winfo_exists():
+                self.root.after(delay_ms, func)
+        except Exception:
+            pass
+
     def _run_webcam_detection(self):
         """Runs webcam discovery in a background thread."""
         available_cams = self.camera_manager.get_available_webcams()
-        self.root.after(0, lambda: self._apply_webcam_list(available_cams))
+        self._safe_after(lambda: self._apply_webcam_list(available_cams))
 
     def _apply_webcam_list(self, available_cams):
         """Applies detected webcams to the dropdown widget on the main thread."""
@@ -303,7 +314,10 @@ class PeopleCounterApp:
         self.update_status("Loading first frame for preview...")
         self.logger.info("Attempting to load first frame for preview.")
         if self.cap:
-            self.cap.release()
+            try:
+                self.cap.release()
+            except Exception:
+                pass
             self.cap = None
 
         source_type = self.video_source_var.get()
@@ -319,6 +333,7 @@ class PeopleCounterApp:
         if self.cap:
             ret, frame = self.cap.read()
             if ret:
+                self.last_preview_frame = frame.copy()
                 self.video_display_manager.set_original_frame_dimensions(frame.shape[1], frame.shape[0])
                 self.video_display_manager.show_frame(frame, self.line_coords, self.processor, self.logger)
 
@@ -359,6 +374,14 @@ class PeopleCounterApp:
              self.widgets['instruction_label'].config(text="Saved line loaded. Click 'Draw New Line' to change it.")
         else:
             self.widgets['instruction_label'].config(text="Load video before drawing.")
+
+    def refresh_preview(self):
+        """Redraws the counting line and badges on the preview frame without querying hardware."""
+        if not self.running and self.video_display_manager is not None:
+            if self.last_preview_frame is not None:
+                self.video_display_manager.show_frame(self.last_preview_frame.copy(), self.line_coords, self.processor, self.logger)
+            elif self.cap:
+                self.load_first_frame()
 
 
     def start_processing_logic(self):
@@ -417,6 +440,8 @@ class PeopleCounterApp:
             self.widgets['seek_slider'].config(state='disabled')
 
         self.running = True
+        self.active_source_type = current_source_type
+        self.active_api_url = self.api_endpoint_var.get()
         self.widgets['start_btn'].config(state='disabled')
         self.widgets['stop_btn'].config(state='normal')
         self.widgets['draw_line_btn'].config(state='disabled')
@@ -429,7 +454,7 @@ class PeopleCounterApp:
         self.widgets['progress_bar'].config(mode='indeterminate')
         self.widgets['progress_bar'].start()
 
-        self.video_thread = threading.Thread(target=self.video_loop, daemon=True)
+        self.video_thread = threading.Thread(target=self.video_loop, args=(current_source_type,), daemon=True)
         self.video_thread.start()
 
         # Save current video source selection to settings
@@ -448,7 +473,7 @@ class PeopleCounterApp:
         self.logger.info("Stopping processing.")
         self.update_status("Stopping processing...")
 
-        if self.video_thread:
+        if self.video_thread and threading.current_thread() != self.video_thread:
              self.video_thread.join(timeout=2.0)
 
         self.widgets['start_btn'].config(state='normal')
@@ -463,7 +488,10 @@ class PeopleCounterApp:
         self.widgets['progress_bar'].config(value=0, mode='determinate')
 
         if self.cap:
-            self.cap.release()
+            try:
+                self.cap.release()
+            except Exception:
+                pass
             self.cap = None
         self.video_playback_controls.release()
 
@@ -471,39 +499,39 @@ class PeopleCounterApp:
             data_to_send = list(self.log_data)
             self.log_data.clear()
 
+        api_url = self.api_endpoint_var.get()
         if data_to_send:
-            threading.Thread(target=self._send_data_async, args=(data_to_send,), daemon=True).start()
+            threading.Thread(target=self._send_data_async, args=(data_to_send, api_url), daemon=True).start()
 
-        self.processor.reset()
-        if 'in_count_val' in self.widgets:
-            self.widgets['in_count_val'].set("0")
-        if 'out_count_val' in self.widgets:
-            self.widgets['out_count_val'].set("0")
+        # Reset in-frame occupancy on stop, but keep cumulative IN/OUT counts visible
         if 'in_frame_val' in self.widgets:
             self.widgets['in_frame_val'].set("0")
-        if 'net_flow_val' in self.widgets:
-            self.widgets['net_flow_val'].set("0")
-        self.widgets['in_count_var'].set("IN: 0")
-        self.widgets['out_count_var'].set("OUT: 0")
-        self.widgets['people_in_frame_var'].set("In Frame: 0")
+        if 'people_in_frame_var' in self.widgets:
+            self.widgets['people_in_frame_var'].set("In Frame: 0")
+
         self.update_status("Processing stopped. Ready.")
         self.logger.info("Processing stopped.")
         # Reload preview frame so user still sees the video/webcam and counting line
         self.root.after(100, self.load_first_frame)
 
-    def video_loop(self):
+    def video_loop(self, source_type=None):
+        if source_type is None:
+            source_type = getattr(self, 'active_source_type', 'video')
+
         log_interval = 1.0
         last_log_time = time.time()
+        consecutive_failures = 0
+        max_failures = 30 if source_type != "video" else 1
 
         while self.running:
             frame = None
             ret = False
 
-            if self.video_source_var.get() == "video":
+            if source_type == "video":
                 if self.video_playback_controls.is_playing():
                     ret, frame = self.video_playback_controls.get_frame()
                 else:
-                    time.sleep(0.1) # Idle while paused — prevents 100% CPU/GPU spin
+                    time.sleep(0.05) # Idle while paused — prevents 100% CPU/GPU spin
                     continue
 
                 if ret and self.video_playback_controls.cap:
@@ -511,27 +539,30 @@ class PeopleCounterApp:
                     total_frames = self.video_playback_controls.get_total_frames()
                     if total_frames > 0:
                         progress_percent = (current_frame_pos / total_frames) * 100
-                        self.root.after(0, lambda p=progress_percent: self.widgets['progress_bar'].config(value=p, mode='determinate'))
-                        self.root.after(0, lambda v=current_frame_pos: self.widgets['seek_slider'].set(v))
-                    else:
-                        self.root.after(0, lambda: self.widgets['progress_bar'].config(mode='indeterminate'))
+                        self._safe_after(lambda p=progress_percent: self.widgets['progress_bar'].config(value=p, mode='determinate'))
+                        self._safe_after(lambda v=current_frame_pos: self.widgets['seek_slider'].set(v))
             else: # Webcam or IP Camera
-                if self.cap:
+                if self.cap and self.cap.isOpened():
                     ret, frame = self.cap.read()
                 else:
                     ret, frame = False, None
-                self.root.after(0, lambda: self.widgets['progress_bar'].config(mode='indeterminate'))
-
 
             if not ret:
-                self.logger.info("End of video stream or error reading frame. Stopping processing.")
-                self.root.after(0, self.stop_processing_logic)
-                break
+                consecutive_failures += 1
+                if consecutive_failures < max_failures:
+                    time.sleep(0.03) # Short retry delay for camera device
+                    continue
+                else:
+                    self.logger.info("End of video stream or error reading frame. Stopping processing.")
+                    self._safe_after(self.stop_processing_logic)
+                    break
+            else:
+                consecutive_failures = 0
 
             frame, in_c, out_c, people_in_frame = self.processor.process_frame(frame)
             if not self._ui_update_pending:
                 self._ui_update_pending = True
-                self.root.after(0, lambda f=frame, i=in_c, o=out_c, p=people_in_frame: self._update_ui_frame(f, i, o, p))
+                self._safe_after(lambda f=frame, i=in_c, o=out_c, p=people_in_frame: self._update_ui_frame(f, i, o, p))
 
             if time.time() - last_log_time >= log_interval:
                 # Store data in the new format for API
@@ -547,7 +578,7 @@ class PeopleCounterApp:
                 self.logger.debug(f"Logged data: createdAt={timestamp_iso}, IN={in_c}, OUT={out_c}, InFrame={people_in_frame}")
 
         if self.running:
-            self.root.after(0, self.stop_processing_logic)
+            self._safe_after(self.stop_processing_logic)
 
     def _update_ui_frame(self, frame, in_c, out_c, people_in_frame):
         """Updates live counts, performance stats, and renders video frame without queue flooding."""
@@ -601,18 +632,19 @@ class PeopleCounterApp:
             self.widgets['status_label'].config(text=f"● {message}", fg=color)
 
 
-    def _send_data_async(self, payload):
+    def _send_data_async(self, payload, api_url=None):
         """Sends collected session data to the specified API endpoint in a background thread."""
-        api_url = self.api_endpoint_var.get()
+        if not api_url:
+            api_url = getattr(self, 'active_api_url', '')
         if not api_url:
             self.logger.warning("Attempted to send data but API endpoint is not configured. Saving offline.")
             self.offline_manager.save_pending_payload(payload)
-            self.root.after(0, lambda: self.update_status("API not set. Data saved offline.", is_error=True))
+            self._safe_after(lambda: self.update_status("API not set. Data saved offline.", is_error=True))
             return
 
         headers = {'Content-Type': 'application/json'}
         self.logger.info(f"Attempting to send {len(payload)} data points to API: {api_url}")
-        self.root.after(0, lambda: self.update_status("Sending data to API...", is_error=False))
+        self._safe_after(lambda: self.update_status("Sending data to API...", is_error=False))
 
         # First flush any pending offline logs
         pending = self.offline_manager.get_pending_payloads()
@@ -628,12 +660,27 @@ class PeopleCounterApp:
             response = requests.post(api_url, json=payload, headers=headers, timeout=10)
             response.raise_for_status()
             self.logger.info(f"Data successfully sent to API. Status Code: {response.status_code}")
-            self.root.after(0, lambda: self.update_status("Data sent to API successfully!", is_error=False))
+            self._safe_after(lambda: self.update_status("Data sent to API successfully!", is_error=False))
         except Exception as e:
             self.logger.warning(f"API request failed ({e}). Caching to offline SQLite database.")
             self.offline_manager.save_pending_payload(payload)
             pending_count = self.offline_manager.get_pending_count()
-            self.root.after(0, lambda: self.update_status(f"Saved to offline cache ({pending_count} batches queued).", is_error=True))
+            self._safe_after(lambda: self.update_status(f"Saved to offline cache ({pending_count} batches queued).", is_error=True))
+
+    def _flush_offline_cache(self):
+        """Flushes queued offline records to the API server."""
+        api_url = self.api_endpoint_var.get().strip()
+        if not api_url:
+            return
+        headers = {'Content-Type': 'application/json'}
+        pending = self.offline_manager.get_pending_payloads()
+        for rec_id, old_batch in pending:
+            try:
+                res = requests.post(api_url, json=old_batch, headers=headers, timeout=5)
+                if res.status_code < 400:
+                    self.offline_manager.remove_payload(rec_id)
+            except Exception:
+                break
 
     def send_data_to_api(self):
         """Sends collected session data to the specified API endpoint."""
@@ -643,7 +690,8 @@ class PeopleCounterApp:
             self.logger.info("No log data to send to API for this session.")
             self.update_status("No data to send to API.", is_error=False)
             return
-        threading.Thread(target=self._send_data_async, args=(data,), daemon=True).start()
+        api_url = self.api_endpoint_var.get()
+        threading.Thread(target=self._send_data_async, args=(data, api_url), daemon=True).start()
 
     def on_closing(self):
         # Update settings with current UI values
